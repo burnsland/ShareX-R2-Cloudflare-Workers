@@ -1,9 +1,9 @@
 name = "sharex-r2-cloudflare-workers"
 type = "javascript"
-account_id = "522ed7942a6ec29727e101623a48ea76"
+account_id = "505b1854fb3fb9bce6eaba5695228c43"
 workers_dev = true
-route = "r2-sharex.jross.me/*"
-zone_id = "487fd5cbd30793ca0fe54b33e538825a"
+route = "blcdn.burnsland.com/*"
+zone_id = "87b6e575cfe41eda3850b2077e93ecb5"
 compatibility_date = "2022-04-22"
 
 [build]
@@ -14,5 +14,5 @@ format = "modules"
 main = "./index.mjs"
 
 [[r2_buckets]]
-bucket_name = "sharex-files"
+bucket_name = "blcdn"
 binding = "R2_BUCKET"
