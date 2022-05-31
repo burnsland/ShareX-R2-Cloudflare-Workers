@@ -1,9 +1,16 @@
 import {Router} from 'itty-router';
+import render2 from 'render2';
+
+interface Env {
+	AUTH_KEY: string;
+	R2_BUCKET: R2Bucket;
+	CACHE_CONTROL?: string;
+}
 
 const router = Router();
 
 // handle authentication
-const authMiddleware = (request, env) => {
+const authMiddleware = (request: Request, env: Env): Response | undefined => {
 	const url = new URL(request.url);
 	if(request.headers?.get("x-auth-key") !== env.AUTH_KEY && url.searchParams.get("authkey") !== env.AUTH_KEY){
 		return new Response(JSON.stringify({
@@ -19,7 +26,7 @@ const authMiddleware = (request, env) => {
 };
 
 // handle upload
-router.post("/upload", authMiddleware, async (request, env) => {
+router.post("/upload", authMiddleware, async (request: Request, env: Env): Promise<Response> => {
 	const url = new URL(request.url);
 	let fileslug = url.searchParams.get('filename');
 	if(!fileslug){
@@ -50,6 +57,7 @@ router.post("/upload", authMiddleware, async (request, env) => {
 		await env.R2_BUCKET.put(filename, request.body, {
 			httpMetadata: {
 				contentType: contentType,
+				cacheControl: 'public, max-age=604800',
 			},
 		});
 	}catch(error){
@@ -83,60 +91,33 @@ router.post("/upload", authMiddleware, async (request, env) => {
 });
 
 // handle file retrieval
-const getFile = async (request, env, ctx) => {
+const getFile = async (request: Request, env: Env, ctx: ExecutionContext): Promise<Response> => {
 	const url = new URL(request.url);
 	const id = url.pathname.slice(6);
+	const notFound = error => new Response(JSON.stringify({
+		success: false,
+		error: error ?? 'Not Found',
+	}), {
+		status: 404,
+		headers: {
+			"content-type": "application/json",
+		},
+	});
 	if(!id){
-		return new Response(JSON.stringify({
-			success: false,
-			error: 'Missing ID',
-		}), {
-			status: 404,
-			headers: {
-				"content-type": "application/json",
-			},
-		});
+		return notFound('Missing ID');
 	}
-	// try matching from cache first
-	const cache = caches.default;
-	let response = await cache.match(request);
-	if(!response){
-		// no cache match, try reading from R2
-		// we shouldn't need to try/catch here, but R2 seems to throw internal errrors right now when querying for a file that doesn't exist
-		let file;
-		try{
-			file = await env.R2_BUCKET.get(id);
-		}catch{}
-		if(!file){
-			return new Response(JSON.stringify({
-				success: false,
-				error: 'Object Not Found',
-			}), {
-				status: 404,
-				headers: {
-					"content-type": "application/json",
-				},
-			});
-		}
 
-		response = new Response(file.body, {
-			headers: {
-				'cache-control': 'public, max-age=604800',
-				'content-type': file.httpMetadata?.contentType,
-				'etag': file.httpEtag,
-			},
-		});
-
-		// store in cache asynchronously, so to not hold up the request
-		ctx.waitUntil(cache.put(request, response.clone()));
-	}
-	// return uploaded image, etc.
-	return response;
+	const imageReq = new Request(`https://r2host/${id}`, request);
+	return render2.fetch(imageReq, {
+		...env,
+		CACHE_CONTROL: 'public, max-age=604800',
+	}, ctx);
 };
 router.get("/upload/:id", getFile);
 router.get("/file/*", getFile);
+router.head("/file/*", getFile);
 
-router.get('/files/list', authMiddleware, async (request, env) => {
+router.get('/files/list', authMiddleware, async (request: Request, env: Env): Promise<Response> => {
 	const items = await env.R2_BUCKET.list({limit: 1000});
 	return new Response(JSON.stringify(items, null, 2), {
 		headers: {
@@ -146,7 +127,7 @@ router.get('/files/list', authMiddleware, async (request, env) => {
 });
 
 // 404 everything else
-router.all('*', () => new Response(JSON.stringify({
+router.all('*', (): Response => new Response(JSON.stringify({
 	success: false,
 	error: 'Not Found',
 }), {

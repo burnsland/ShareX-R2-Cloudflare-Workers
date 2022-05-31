@@ -5,14 +5,12 @@ workers_dev = true
 route = "blcdn.burnsland.com/*"
 zone_id = "87b6e575cfe41eda3850b2077e93ecb5"
 compatibility_date = "2022-04-22"
+main = "./dist/index.mjs"
 
 [build]
 command = "npm run build"
 
-[build.upload]
-format = "modules"
-main = "./index.mjs"
-
 [[r2_buckets]]
 bucket_name = "blcdn"
+preview_bucket_name="blcdn"
 binding = "R2_BUCKET"
